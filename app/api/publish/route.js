@@ -44,14 +44,14 @@ export async function POST(req) {
     const sent = await sendMessage({ chat_id: target, text });
     const message_id = sent?.message_id;
 
-    // only mark as published if we posted to the real channel
-    if (!targetTest) {
-      await sb.from('incidents').update({
-        status: 'published',
-        telegram_message_id: message_id,
-        published_at: new Date().toISOString()
-      }).eq('id', incident.id);
-    }
+    // Always mark as published — the is_test flag in publish_log records whether
+    // this went to the real channel or not. UI used to keep "approved" status
+    // forever in test mode which was confusing — now status reflects reality.
+    await sb.from('incidents').update({
+      status: 'published',
+      telegram_message_id: message_id,
+      published_at: new Date().toISOString()
+    }).eq('id', incident.id);
 
     await sb.from('publish_log').insert({
       channel_id: ch.id,

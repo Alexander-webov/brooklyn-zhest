@@ -47,15 +47,18 @@ export function IncidentCard({ incident, onChange }) {
     sourceName: 'Источник'
   });
 
+  // Action helper: shows feedback then waits a tick for DB to settle before refetching the list.
   const action = async (label, fn) => {
     setBusy(true); setFeedback('');
     try {
       await fn();
       setFeedback(label);
-      setTimeout(() => onChange?.(), 200);
+      // give Postgres + the network a moment so the next list fetch sees the new status
+      setTimeout(() => {
+        onChange?.();
+      }, 500);
     } catch (e) {
       setFeedback('ошибка: ' + (e?.message || 'unknown'));
-    } finally {
       setBusy(false);
     }
   };
