@@ -1,12 +1,19 @@
 'use client';
 import { useState } from 'react';
-import { formatDistanceToNowStrict, format } from 'date-fns';
+import { formatDistanceToNowStrict } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
 const TYPE_EMOJI = {
   shooting: '🚨', robbery: '🚨', fire: '🔥', arrest: '🚓', missing: '🆘',
   assault: '⚠️', theft: '🕵️', crash: '🚗', weapon: '🔫', drugs: '💊',
   suspicious: '👁️', emergency: '🚑', other: '📍'
+};
+
+const TYPE_LABEL_RU = {
+  shooting: 'СТРЕЛЬБА', robbery: 'ОГРАБЛЕНИЕ', fire: 'ПОЖАР', arrest: 'ЗАДЕРЖАНИЕ',
+  missing: 'РОЗЫСК', assault: 'НАПАДЕНИЕ', theft: 'КРАЖА', crash: 'ДТП',
+  weapon: 'ОРУЖИЕ', drugs: 'НАРКОТИКИ', suspicious: 'ПОДОЗРИТЕЛЬНО',
+  emergency: 'ЧП', other: 'ИНЦИДЕНТ'
 };
 
 const STATUS_TONE = {
@@ -41,22 +48,22 @@ export function IncidentCard({ incident, onChange }) {
     template: ch.post_template,
     type: draft.type,
     hashtag: nh.hashtag,
+    neighborhoodName: nh.name,
     timeAgo: ago,
     landmark: draft.landmark || draft.address || nh.name || 'Бруклин',
+    address: draft.address,
+    title: draft.title_ru,
     body: draft.body_ru,
-    sourceName: 'Источник'
+    sourceName: 'Источник',
+    score: draft.score
   });
 
-  // Action helper: shows feedback then waits a tick for DB to settle before refetching the list.
   const action = async (label, fn) => {
     setBusy(true); setFeedback('');
     try {
       await fn();
       setFeedback(label);
-      // give Postgres + the network a moment so the next list fetch sees the new status
-      setTimeout(() => {
-        onChange?.();
-      }, 500);
+      setTimeout(() => onChange?.(), 500);
     } catch (e) {
       setFeedback('ошибка: ' + (e?.message || 'unknown'));
       setBusy(false);
@@ -103,7 +110,6 @@ export function IncidentCard({ incident, onChange }) {
 
   return (
     <div className={`hairline ${tone.bg}`}>
-      {/* Header strip */}
       <div className="flex items-center gap-3 px-4 py-2.5 hairline-b font-mono text-[0.7rem] uppercase tracking-[0.12em]">
         <span className={`${tone.accent} font-semibold`}>● {tone.label}</span>
         <span className="text-ink-500">{TYPE_EMOJI[incident.type] || '📍'} {incident.type}</span>
@@ -115,7 +121,6 @@ export function IncidentCard({ incident, onChange }) {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-px bg-transparent">
-        {/* Left: content */}
         <div className="p-5">
           {!editing ? (
             <>
@@ -155,7 +160,6 @@ export function IncidentCard({ incident, onChange }) {
           )}
         </div>
 
-        {/* Right: post preview */}
         <div className="p-5 bg-ink-0/40 hairline-l border-l border-white/5">
           <div className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-ink-600 mb-3">
             Превью поста · {ch.test_mode ? 'TEST' : 'LIVE'}
@@ -166,7 +170,6 @@ export function IncidentCard({ incident, onChange }) {
         </div>
       </div>
 
-      {/* Actions */}
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 hairline-t bg-ink-0/40">
         {!editing && (
           <>
@@ -228,18 +231,30 @@ function SelectField({ label, value, onChange, options }) {
   );
 }
 
-function renderPreview({ template, type, hashtag, timeAgo, landmark, body, sourceName }) {
+function renderPreview({ template, type, hashtag, neighborhoodName, timeAgo, landmark, address, title, body, sourceName, score }) {
   const t = template ||
     '{type_emoji} {neighborhood_hashtag}\n\n📍 {time_ago} · {landmark}\n\n{description}\n\n⚡ Источник: {source}';
-  return t.replace(/\{(\w+)\}/g, (_, k) => {
-    const map = {
-      type_emoji: TYPE_EMOJI[type] || '📍',
-      neighborhood_hashtag: hashtag || '#бруклин',
-      time_ago: timeAgo,
-      landmark,
-      description: body,
-      source: sourceName
-    };
-    return map[k] ?? '';
-  });
+  const map = {
+    type_emoji: TYPE_EMOJI[type] || '📍',
+    type_label: TYPE_LABEL_RU[type] || 'ИНЦИДЕНТ',
+    neighborhood_hashtag: hashtag || '#бруклин',
+    neighborhood_name: neighborhoodName || 'Бруклин',
+    time_ago: timeAgo,
+    landmark: landmark || 'Бруклин',
+    address: address || '',
+    title_ru: title || '',
+    description: body || '',
+    body: body || '',
+    source: sourceName || 'Источник',
+    score: String(score ?? '')
+  };
+  let out = t.replace(/\{(\w+)\}/g, (_, k) => map[k] ?? '');
+  // collapse blank lines, same as server-side
+  out = out.split('\n').reduce((acc, line) => {
+    if (line.trim() === '') {
+      if (acc.length === 0 || acc[acc.length - 1] !== '') acc.push('');
+    } else acc.push(line);
+    return acc;
+  }, []).join('\n');
+  return out.replace(/^\s*\n+/, '').replace(/\n+\s*$/, '');
 }
